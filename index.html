@@ -150,6 +150,32 @@ async function decode(canvas) {
     width: Math.hypot(b.position.topRight.x - b.position.topLeft.x, b.position.topRight.y - b.position.topLeft.y),
   }));
 }
+async function decodeImageVariants(canvas) {
+  const found = [];
+  const add = async (source, scale = 1) => {
+    for (const b of await decode(source)) {
+      const candidate = { ...b, x: b.x / scale, y: b.y / scale, width: b.width / scale };
+      const duplicate = found.some((prev) => prev.text.trim() === candidate.text.trim() &&
+        Math.hypot(prev.x - candidate.x, prev.y - candidate.y) < Math.max(20, Math.min(prev.width, candidate.width) * 0.2));
+      if (!duplicate) found.push(candidate);
+    }
+  };
+  const transformed = (source, scale = 1) => {
+    const cv = newCanvas(source.width * scale, source.height * scale);
+    const ctx = cv.getContext("2d"); ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(source, 0, 0, cv.width, cv.height);
+    return cv;
+  };
+
+  await add(canvas);
+  await add(threshold(transformed(canvas)));
+  if (canvas.width * canvas.height <= 1_500_000 && Math.max(canvas.width, canvas.height) <= 2000) {
+    const enlarged = transformed(canvas, 2);
+    await add(enlarged, 2);
+    await add(threshold(enlarged), 2);
+  }
+  return found.sort((a, b) => a.y - b.y || a.x - b.x);
+}
 
 // Each page provides: barcodes (in read-resolution pixels), crop(box), pageText(box)
 async function* pdfPages(file) {
@@ -182,7 +208,7 @@ async function* imagePages(file) {
   status("Finding barcodes…");
   const bmp = await createImageBitmap(file);
   const c = newCanvas(bmp.width, bmp.height); c.getContext("2d").drawImage(bmp, 0, 0);
-  const barcodes = await decode(c);
+  const barcodes = await decodeImageVariants(c);
   // Upscale low-resolution tags for OCR without downscaling higher-resolution JPEGs.
   const MIN_OCR_TAG_HEIGHT = 1200;
   const TAG_HEIGHT_PER_BARCODE_WIDTH = 2.92;
@@ -227,6 +253,7 @@ $("run").addEventListener("click", async () => {
         thumbs[`Page ${p.pageNo} / ${b.text.trim()}`] = (await p.crop(box, false, 0.4)).toDataURL("image/jpeg", 0.85);
       }
     }
+    if (!seen.length) throw new Error("No barcodes were detected in the artwork. Try a clearer image or the original PDF.");
     TagCore.finalize(excel, seen, errors);
     render(errors, seen, excel, thumbs);
     status("Done.");
