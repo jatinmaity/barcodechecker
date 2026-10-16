@@ -185,7 +185,7 @@ async function* imagePages(file) {
   const barcodes = await decode(c);
   // enlarge crops so small text reaches the size the reader works best at (barcode ≈ 565px wide)
   const widths = barcodes.map((b) => b.width).sort((a, b) => a - b);
-  const k = widths.length ? Math.min(3, Math.max(1, 565 / widths[widths.length >> 1])) : 1;
+  const k = widths.length ? Math.max(1, 565 / widths[widths.length >> 1]) : 1;
   const crop = async ([x0, y0, x1, y1], th, up = 1) => {
     up *= k;
     const cv = newCanvas((x1 - x0) * up, (y1 - y0) * up);
