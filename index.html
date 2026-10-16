@@ -183,9 +183,11 @@ async function* imagePages(file) {
   const bmp = await createImageBitmap(file);
   const c = newCanvas(bmp.width, bmp.height); c.getContext("2d").drawImage(bmp, 0, 0);
   const barcodes = await decode(c);
-  // enlarge crops so small text reaches the size the reader works best at (barcode ≈ 565px wide)
+  // Upscale low-resolution tags for OCR without downscaling higher-resolution JPEGs.
+  const MIN_OCR_TAG_HEIGHT = 1200;
+  const TAG_HEIGHT_PER_BARCODE_WIDTH = 2.92;
   const widths = barcodes.map((b) => b.width).sort((a, b) => a - b);
-  const k = widths.length ? Math.max(1, 565 / widths[widths.length >> 1]) : 1;
+  const k = widths.length ? Math.max(1, MIN_OCR_TAG_HEIGHT / (widths[widths.length >> 1] * TAG_HEIGHT_PER_BARCODE_WIDTH)) : 1;
   const crop = async ([x0, y0, x1, y1], th, up = 1) => {
     up *= k;
     const cv = newCanvas((x1 - x0) * up, (y1 - y0) * up);
