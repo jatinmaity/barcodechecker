@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Barcode tag checker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Narrow:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #1b2230; --ink-soft: #5b6475; --line: #d9dde4; --paper: #f4f6f8; --card: #ffffff;
+  --tag: #ef7d1a; --tag-ink: #ffffff; --ok: #1d7a4c; --ok-bg: #e5f3ec; --bad: #b8322a; --bad-bg: #fbeceb;
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #e8ebf0; --ink-soft: #9aa3b2; --line: #343b48; --paper: #14181f; --card: #1c212b;
+    --tag: #f08a2e; --tag-ink: #1b1206; --ok: #5fcf96; --ok-bg: #16301f; --bad: #ff8077; --bad-bg: #3a1a18;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ink: #e8ebf0; --ink-soft: #9aa3b2; --line: #343b48; --paper: #14181f; --card: #1c212b;
+  --tag: #f08a2e; --tag-ink: #1b1206; --ok: #5fcf96; --ok-bg: #16301f; --bad: #ff8077; --bad-bg: #3a1a18;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: inherit; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.55 "Archivo", "Helvetica Neue", Arial, sans-serif; }
+main { max-width: 900px; margin: 0 auto; padding: 48px 20px 80px; }
+h1 { font: 700 clamp(2rem, 5vw, 2.9rem)/1.05 "Archivo Narrow", "Arial Narrow", sans-serif; letter-spacing: -0.01em; margin: 0 0 10px; }
+.lede { color: var(--ink-soft); max-width: 60ch; margin: 0 0 36px; }
+
+.drops { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+/* each upload box is drawn as a hang tag */
+.drop { position: relative; display: block; background: var(--card); border: 1.5px solid var(--line); border-radius: 6px 6px 14px 14px;
+  padding: 0 0 22px; cursor: pointer; overflow: hidden; transition: border-color .15s; }
+.drop:hover, .drop.over { border-color: var(--tag); }
+.drop:focus-within { outline: 3px solid var(--tag); outline-offset: 2px; }
+.drop .band { background: var(--tag); color: var(--tag-ink); padding: 12px 18px 12px 44px; font: 600 1.05rem "Archivo Narrow", sans-serif; position: relative; }
+.drop .band::before { content: ""; position: absolute; left: 16px; top: 50%; width: 14px; height: 14px; margin-top: -7px; border-radius: 50%;
+  background: var(--card); box-shadow: inset 0 0 0 2px rgba(0,0,0,.18); }
+.drop .body { padding: 16px 18px 0; color: var(--ink-soft); font-size: .95rem; }
+.drop .file { display: block; margin-top: 8px; color: var(--ink); font-weight: 600; word-break: break-all; }
+.drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 28px 0 8px; }
+button { font: 600 1rem "Archivo", sans-serif; border-radius: 8px; padding: 12px 22px; border: 0; cursor: pointer; }
+.primary { background: var(--ink); color: var(--paper); }
+.primary:disabled { opacity: .35; cursor: not-allowed; }
+.secondary { background: transparent; color: var(--ink); border: 1.5px solid var(--line); padding: 10px 18px; }
+button:focus-visible { outline: 3px solid var(--tag); outline-offset: 2px; }
+#status { color: var(--ink-soft); font-size: .95rem; }
+
+#results { margin-top: 36px; }
+.verdict { border-radius: 10px; padding: 18px 20px; font-weight: 600; font-size: 1.1rem; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+.verdict.ok { background: var(--ok-bg); color: var(--ok); }
+.verdict.bad { background: var(--bad-bg); color: var(--bad); }
+.verdict small { font-weight: 400; color: var(--ink-soft); font-size: .92rem; }
+.totals { color: var(--ink-soft); font-size: .95rem; margin: 14px 2px 22px; }
+.tag-issue { display: grid; grid-template-columns: 150px 1fr; gap: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+.tag-issue img { width: 100%; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
+.tag-issue h3 { margin: 0 0 8px; font: 600 1.1rem "Archivo Narrow", sans-serif; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--ink-soft); font-weight: 500; }
+td.found { color: var(--bad); font-weight: 600; }
+.passed { margin-top: 22px; color: var(--ink-soft); font-size: .95rem; }
+.chip { display: inline-block; background: var(--ok-bg); color: var(--ok); border-radius: 999px; padding: 3px 10px; margin: 4px 6px 0 0; font-size: .85rem; font-weight: 600; }
+.note { margin-top: 40px; color: var(--ink-soft); font-size: .88rem; max-width: 70ch; }
+@media (max-width: 560px) { .tag-issue { grid-template-columns: 1fr; } .tag-issue img { max-width: 180px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Barcode tag checker</h1>
+  <p class="lede">Upload the tag artwork and the PO barcode Excel. Every barcode is scanned and every tag is read and compared with its Excel row. Your files stay on this computer; nothing is uploaded.</p>
+
+  <div class="drops">
+    <label class="drop" id="dropArt">
+      <div class="band">Tag artwork</div>
+      <div class="body">PDF, JPG or PNG <span class="file" id="artName">Drop a file or click to choose</span></div>
+      <input type="file" id="art" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*" aria-label="Tag artwork file">
+    </label>
+    <label class="drop" id="dropXls">
+      <div class="band">PO barcode Excel</div>
+      <div class="body">.xlsx or .xls <span class="file" id="xlsName">Drop a file or click to choose</span></div>
+      <input type="file" id="xls" accept=".xlsx,.xls" aria-label="PO barcode Excel file">
+    </label>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="run" disabled>Check tags</button>
+    <span id="status" role="status" aria-live="polite"></span>
+  </div>
+
+  <section id="results" aria-live="polite"></section>
+
+  <p class="note">Text on the tags is read by OCR. If a single field is flagged on one tag but looks right in the picture, it is most likely a misread; recheck it by eye. Barcode values and PDF quantities are read exactly.</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.3/dist/iife/reader/index.js"></script>
+<script src="core.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+ZXingWASM.prepareZXingModule({
+  overrides: { locateFile: (p, prefix) => p.endsWith(".wasm") ? "https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.3/dist/reader/zxing_reader.wasm" : prefix + p },
+  fireImmediately: true,
+});
+
+const DETECT_SCALE = 250 / 72;   // render for finding barcodes
+const READ_SCALE = 400 / 72;     // render for reading tag text
+const $ = (id) => document.getElementById(id);
+const status = (t) => ($("status").textContent = t);
+let lastErrors = [];
+
+for (const [inp, name, drop] of [["art", "artName", "dropArt"], ["xls", "xlsName", "dropXls"]]) {
+  $(inp).addEventListener("change", () => {
+    $(name).textContent = $(inp).files[0] ? $(inp).files[0].name : "Drop a file or click to choose";
+    $("run").disabled = !($("art").files[0] && $("xls").files[0]);
+  });
+  const d = $(drop);
+  ["dragenter", "dragover"].forEach((e) => d.addEventListener(e, () => d.classList.add("over")));
+  ["dragleave", "drop"].forEach((e) => d.addEventListener(e, () => d.classList.remove("over")));
+}
+
+function threshold(canvas) {
+  const ctx = canvas.getContext("2d"), img = ctx.getImageData(0, 0, canvas.width, canvas.height), p = img.data;
+  for (let i = 0; i < p.length; i += 4) { const v = (0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]) < 110 ? 0 : 255; p[i] = p[i + 1] = p[i + 2] = v; }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+function newCanvas(w, h) {
+  const c = document.createElement("canvas"); c.width = Math.max(1, w); c.height = Math.max(1, h);
+  const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); return c;
+}
+async function decode(canvas) {
+  const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+  const res = await ZXingWASM.readBarcodes(data, { formats: [], maxNumberOfSymbols: 255, tryHarder: true });
+  return res.filter((b) => b.isValid && b.format !== "None").map((b) => ({
+    text: b.text, format: b.format, x: b.position.topLeft.x, y: b.position.topLeft.y,
+    width: Math.hypot(b.position.topRight.x - b.position.topLeft.x, b.position.topRight.y - b.position.topLeft.y),
+  }));
+}
+
+// Each page provides: barcodes (in read-resolution pixels), crop(box), pageText(box)
+async function* pdfPages(file) {
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  for (let n = 1; n <= pdf.numPages; n++) {
+    status(`Page ${n} of ${pdf.numPages}: finding barcodes…`);
+    const page = await pdf.getPage(n);
+    const vd = page.getViewport({ scale: DETECT_SCALE });
+    const c = newCanvas(Math.ceil(vd.width), Math.ceil(vd.height));
+    await page.render({ canvasContext: c.getContext("2d"), viewport: vd }).promise;
+    const k = READ_SCALE / DETECT_SCALE;
+    const barcodes = (await decode(c)).map((b) => ({ ...b, x: b.x * k, y: b.y * k, width: b.width * k }));
+    const vr = page.getViewport({ scale: READ_SCALE });
+    const items = (await page.getTextContent()).items.map((it) => {
+      const [x, y] = vr.convertToViewportPoint(it.transform[4], it.transform[5]);
+      return { str: it.str, x, y };
+    });
+    const crop = async ([x0, y0, x1, y1], th, up = 1) => {
+      const cv = newCanvas((x1 - x0) * up, (y1 - y0) * up);
+      const v = page.getViewport({ scale: READ_SCALE * up });
+      await page.render({ canvasContext: cv.getContext("2d"), viewport: v, transform: [1, 0, 0, 1, -x0 * up, -y0 * up], background: "#fff" }).promise;
+      return th ? threshold(cv) : cv;
+    };
+    const pageText = ([x0, y0, x1, y1]) => items.filter((i) => i.x >= x0 && i.x <= x1 && i.y >= y0 && i.y <= y1 + 60)
+      .sort((a, b) => a.y - b.y || a.x - b.x).map((i) => i.str).join(" ");
+    yield { pageNo: n, barcodes, crop, pageText };
+  }
+}
+async function* imagePages(file) {
+  status("Finding barcodes…");
+  const bmp = await createImageBitmap(file);
+  const c = newCanvas(bmp.width, bmp.height); c.getContext("2d").drawImage(bmp, 0, 0);
+  const barcodes = await decode(c);
+  // enlarge crops so small text reaches the size the reader works best at (barcode ≈ 565px wide)
+  const widths = barcodes.map((b) => b.width).sort((a, b) => a - b);
+  const k = widths.length ? Math.min(3, Math.max(1, 565 / widths[widths.length >> 1])) : 1;
+  const crop = async ([x0, y0, x1, y1], th, up = 1) => {
+    up *= k;
+    const cv = newCanvas((x1 - x0) * up, (y1 - y0) * up);
+    const g = cv.getContext("2d"); g.imageSmoothingQuality = "high";
+    g.drawImage(c, x0, y0, x1 - x0, y1 - y0, 0, 0, cv.width, cv.height);
+    return th ? threshold(cv) : cv;
+  };
+  yield { pageNo: 1, barcodes, crop, pageText: null };
+}
+
+async function readExcel(file) {
+  const wb = XLSX.read(await file.arrayBuffer());
+  return TagCore.parseExcel(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" }));
+}
+
+$("run").addEventListener("click", async () => {
+  const art = $("art").files[0], xls = $("xls").files[0];
+  $("run").disabled = true; $("results").innerHTML = "";
+  let worker;
+  try {
+    status("Reading the Excel…");
+    const excel = await readExcel(xls);
+    if (!excel.map.size) throw new Error("No rows with an ICODE column were found in the Excel.");
+    status("Loading the text reader (first run takes a few seconds)…");
+    worker = await Tesseract.createWorker("eng", 1);
+    const ocr = async (img, psm, wl) => {
+      await worker.setParameters({ tessedit_pageseg_mode: psm, user_defined_dpi: "400", tessedit_char_whitelist: wl || "" });
+      return (await worker.recognize(img)).data.text;
+    };
+    const isPdf = art.type === "application/pdf" || /\.pdf$/i.test(art.name);
+    const errors = [], seen = [], thumbs = {};
+    for await (const p of (isPdf ? pdfPages(art) : imagePages(art))) {
+      const r = await TagCore.checkPage({ ...p, ocr, excel, onProgress: status });
+      errors.push(...r.errors); seen.push(...r.seen);
+      for (const b of p.barcodes) {
+        const s = b.width / 565, box = [b.x - 60 * s, b.y - 950 * s, b.x + 710 * s, b.y + 700 * s].map(Math.round);
+        thumbs[`Page ${p.pageNo} / ${b.text.trim()}`] = (await p.crop(box, false, 0.4)).toDataURL("image/jpeg", 0.85);
+      }
+    }
+    TagCore.finalize(excel, seen, errors);
+    render(errors, seen, excel, thumbs);
+    status("Done.");
+  } catch (e) {
+    status(""); $("results").innerHTML = `<div class="verdict bad">Could not check the files: ${escapeHtml(e.message || String(e))}</div>`;
+  } finally {
+    if (worker) await worker.terminate();
+    $("run").disabled = false;
+  }
+});
+
+const escapeHtml = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function render(errors, seen, excel, thumbs) {
+  lastErrors = errors;
+  const byTag = new Map();
+  for (const e of errors) { if (!byTag.has(e[0])) byTag.set(e[0], []); byTag.get(e[0]).push(e); }
+  const passed = Object.keys(thumbs).filter((t) => !byTag.has(t));
+  let h = errors.length
+    ? `<div class="verdict bad"><span>${errors.length} mistake${errors.length > 1 ? "s" : ""} on ${[...byTag.keys()].filter((k) => k !== "—").length} tag(s)</span><button class="secondary" id="csv">Download mistakes (CSV)</button></div>`
+    : `<div class="verdict ok"><span>All tags match the Excel</span><small>Every field, barcode and quantity checked</small></div>`;
+  h += `<p class="totals">${seen.length} tags found in the artwork · ${excel.map.size} rows in the Excel · Excel total quantity ${excel.total} pcs</p>`;
+  for (const [tag, list] of byTag) {
+    const img = thumbs[tag] ? `<img src="${thumbs[tag]}" alt="Tag ${escapeHtml(tag)}">` : "<div></div>";
+    h += `<article class="tag-issue">${img}<div><h3>${tag === "—" ? "Whole order" : escapeHtml(tag)}</h3><div class="scroll"><table>
+      <thead><tr><th>Field</th><th>Expected</th><th>Artwork shows</th></tr></thead><tbody>
+      ${list.map((e) => `<tr><td>${escapeHtml(e[1])}</td><td>${escapeHtml(e[2])}</td><td class="found">${escapeHtml(e[3])}</td></tr>`).join("")}
+      </tbody></table></div></div></article>`;
+  }
+  if (passed.length && errors.length) h += `<div class="passed">No problems on: ${passed.map((t) => `<span class="chip">${escapeHtml(t.split(" / ")[1])}</span>`).join("")}</div>`;
+  $("results").innerHTML = h;
+  const btn = $("csv");
+  if (btn) btn.onclick = () => {
+    const csv = [["Tag", "Field", "Expected", "Artwork shows"], ...lastErrors].map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "tag_mistakes.csv"; a.click();
+  };
+}
+</script>
+</body>
+</html>
